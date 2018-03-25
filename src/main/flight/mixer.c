@@ -56,19 +56,6 @@
 
 #include "sensors/battery.h"
 
-
-#ifdef USE_DSHOT
-#ifdef USE_DSHOT_DMAR
-    #ifdef FORCE_DSHOT_DMAR
-        #define MIXER_USE_DSHOT_DMAR  true
-    #else
-        #define MIXER_USE_DSHOT_DMAR  false
-    #endif //FORCE_DSHOT_DMAR
-#endif //USE_DSHOT_DMAR       
-#else
-    #define MIXER_USE_DSHOT_DMAR  false
-#endif //USE_DSHOT
-
 #define GET_DSHOT_THROTTLE(min, low, offset) min + ((low - DSHOT_MIN_THROTTLE) / 100.0f) * CONVERT_PARAMETER_TO_PERCENT(offset);
 
 

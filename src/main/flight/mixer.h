@@ -79,6 +79,11 @@
 #define MIXER_PWM_PROTOCOL        TARGET_DEFAULT_PWM_PROTOCOL
 #endif
 
+#if defined(USE_DSHOT) && defined(USE_DSHOT_DMAR) && defined(FORCE_DSHOT_DMAR) 
+    #define MIXER_USE_DSHOT_DMAR  true
+#else
+    #define MIXER_USE_DSHOT_DMAR  false
+#endif //USE_DSHOT
 
 #define CHANNEL_FORWARDING_DISABLED (uint8_t)0xFF
 
