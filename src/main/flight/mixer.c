@@ -170,7 +170,7 @@ void initEscEndpoints(void)
 {
     bool is3dEnabled = feature(FEATURE_3D);
     // Can't use 'isMotorProtocolDshot()' here since motors haven't been initialised yet
-    if ((motorConfig()->dev.motorPwmProtocol >> 8) > 0) {
+    if ((motorConfig()->dev.motorPwmProtocol & 0xFF00) != 0) {
         #ifdef USE_DSHOT
         disarmMotorOutput = DSHOT_DISARM_COMMAND;
         uint32_t low = is3dEnabled ? DSHOT_3D_DEADBAND_LOW : DSHOT_MAX_THROTTLE;
