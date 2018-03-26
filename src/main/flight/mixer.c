@@ -308,76 +308,84 @@ static FAST_RAM float motorRangeMax;
 static FAST_RAM float motorOutputRange;
 static FAST_RAM int8_t motorOutputMixSign;
 
-static inline void update3DNormal(float newThrottle, float currentThrottleInputRange, timeUs_t currentTimeUs, timeUs_t reversalTimeUs) {
-    (void)currentThrottleInputRange;
-    (void)reversalTimeUs;
-    motorRangeMin = deadbandMotor3dHigh;
-    motorRangeMax = motorOutputHigh;
-    motorOutputMin = deadbandMotor3dHigh;
-    motorOutputRange = motorOutputHigh - deadbandMotor3dHigh;
-    if (motorOutputMixSign != 1) {
-        reversalTimeUs = currentTimeUs;
-    }
-    motorOutputMixSign = 1;
-    throttle = newThrottle;
-    currentThrottleInputRange = rcCommandThrottleRange3dHigh;
-}
-
-static inline void update3DInverted(float newThrottle, float currentThrottleInputRange, timeUs_t currentTimeUs, timeUs_t reversalTimeUs) {
-    (void)currentThrottleInputRange;
-    (void)reversalTimeUs;    
-    motorRangeMin = motorOutputLow;
-    motorRangeMax = deadbandMotor3dLow;
-    if (isMotorProtocolDshot()) {
-        motorOutputMin = motorOutputLow;
-        motorOutputRange = deadbandMotor3dLow - motorOutputLow;
-    } else {
-        motorOutputMin = deadbandMotor3dLow;
-        motorOutputRange = motorOutputLow - deadbandMotor3dLow;
-    }
-    if (motorOutputMixSign != -1) {
-        reversalTimeUs = currentTimeUs;
-    }
-    motorOutputMixSign = -1;
-    throttle = newThrottle;
-    currentThrottleInputRange = rcCommandThrottleRange3dLow;
-}
-
-static inline void calculate3d(timeUs_t currentTimeUs, float currentThrottleInputRange) {
-    static uint16_t rcThrottlePrevious = 0;   // Store the last throttle direction for deadband transitions
-    static timeUs_t reversalTimeUs = 0; // time when motors last reversed in 3D mode
-    if (!ARMING_FLAG(ARMED)) {
-        rcThrottlePrevious = rxConfig()->midrc; // When disarmed set to mid_rc. It always results in positive direction after arming.
-    }
-    if (rcCommand[THROTTLE] <= rcCommand3dDeadBandLow) {
-        // INVERTED
-        update3DInverted((float)rcCommand3dDeadBandLow - rcCommand[THROTTLE], currentThrottleInputRange, currentTimeUs, reversalTimeUs);
-        rcThrottlePrevious = rcCommand[THROTTLE];
-    } else if (rcCommand[THROTTLE] >= rcCommand3dDeadBandHigh) {
-        // NORMAL
-        update3DNormal((float)rcCommand[THROTTLE] - rcCommand3dDeadBandHigh, currentThrottleInputRange, currentTimeUs, reversalTimeUs);
-        rcThrottlePrevious = rcCommand[THROTTLE];
-    } else if ((rcThrottlePrevious <= rcCommand3dDeadBandLow &&
-            !flight3DConfigMutable()->switched_mode3d) ||
-            isMotorsReversed()) {
-        // INVERTED_TO_DEADBAND
-        update3DInverted(0.0f, currentTimeUs, currentThrottleInputRange, reversalTimeUs);
-    } else {
-        // NORMAL_TO_DEADBAND
-        update3DNormal(0.0f, currentTimeUs, currentThrottleInputRange, reversalTimeUs);
-    }
-    if (currentTimeUs - reversalTimeUs < 250000) {
-        // keep ITerm zero for 250ms after motor reversal
-        pidResetITerm();
-    }
-}
-
 static void calculateThrottleAndCurrentMotorEndpoints(timeUs_t currentTimeUs)
 {
-    float currentThrottleInputRange = 0.0f;
+    static uint16_t rcThrottlePrevious = 0;   // Store the last throttle direction for deadband transitions
+    static timeUs_t reversalTimeUs = 0; // time when motors last reversed in 3D mode
+    float currentThrottleInputRange = 0;
 
     if (feature(FEATURE_3D)) {
-        calculate3d(currentTimeUs, currentThrottleInputRange);
+        if (!ARMING_FLAG(ARMED)) {
+            rcThrottlePrevious = rxConfig()->midrc; // When disarmed set to mid_rc. It always results in positive direction after arming.
+        }
+
+        if (rcCommand[THROTTLE] <= rcCommand3dDeadBandLow) {
+            // INVERTED
+            motorRangeMin = motorOutputLow;
+            motorRangeMax = deadbandMotor3dLow;
+            if (isMotorProtocolDshot()) {
+                motorOutputMin = motorOutputLow;
+                motorOutputRange = deadbandMotor3dLow - motorOutputLow;
+            } else {
+                motorOutputMin = deadbandMotor3dLow;
+                motorOutputRange = motorOutputLow - deadbandMotor3dLow;
+            }
+            if (motorOutputMixSign != -1) {
+                reversalTimeUs = currentTimeUs;
+            }
+            motorOutputMixSign = -1;
+            rcThrottlePrevious = rcCommand[THROTTLE];
+            throttle = rcCommand3dDeadBandLow - rcCommand[THROTTLE];
+            currentThrottleInputRange = rcCommandThrottleRange3dLow;
+        } else if (rcCommand[THROTTLE] >= rcCommand3dDeadBandHigh) {
+            // NORMAL
+            motorRangeMin = deadbandMotor3dHigh;
+            motorRangeMax = motorOutputHigh;
+            motorOutputMin = deadbandMotor3dHigh;
+            motorOutputRange = motorOutputHigh - deadbandMotor3dHigh;
+            if (motorOutputMixSign != 1) {
+                reversalTimeUs = currentTimeUs;
+            }
+            motorOutputMixSign = 1;
+            rcThrottlePrevious = rcCommand[THROTTLE];
+            throttle = rcCommand[THROTTLE] - rcCommand3dDeadBandHigh;
+            currentThrottleInputRange = rcCommandThrottleRange3dHigh;
+        } else if ((rcThrottlePrevious <= rcCommand3dDeadBandLow &&
+                !flight3DConfigMutable()->switched_mode3d) ||
+                isMotorsReversed()) {
+            // INVERTED_TO_DEADBAND
+            motorRangeMin = motorOutputLow;
+            motorRangeMax = deadbandMotor3dLow;
+            if (isMotorProtocolDshot()) {
+                motorOutputMin = motorOutputLow;
+                motorOutputRange = deadbandMotor3dLow - motorOutputLow;
+            } else {
+                motorOutputMin = deadbandMotor3dLow;
+                motorOutputRange = motorOutputLow - deadbandMotor3dLow;
+            }
+            if (motorOutputMixSign != -1) {
+                reversalTimeUs = currentTimeUs;
+            }
+            motorOutputMixSign = -1;
+            throttle = 0;
+            currentThrottleInputRange = rcCommandThrottleRange3dLow;
+        } else {
+            // NORMAL_TO_DEADBAND
+            motorRangeMin = deadbandMotor3dHigh;
+            motorRangeMax = motorOutputHigh;
+            motorOutputMin = deadbandMotor3dHigh;
+            motorOutputRange = motorOutputHigh - deadbandMotor3dHigh;
+            if (motorOutputMixSign != 1) {
+                reversalTimeUs = currentTimeUs;
+            }
+            motorOutputMixSign = 1;
+            throttle = 0;
+            currentThrottleInputRange = rcCommandThrottleRange3dHigh;
+        }
+        if (currentTimeUs - reversalTimeUs < 250000) {
+            // keep ITerm zero for 250ms after motor reversal
+            pidResetITerm();
+        }
     } else {
         throttle = rcCommand[THROTTLE] - rxConfig()->mincheck;
         currentThrottleInputRange = rcCommandThrottleRange;
@@ -510,36 +518,61 @@ void mixTable(timeUs_t currentTimeUs, uint8_t vbatPidCompensation)
     applyMixToMotors(motorMix);
 }
 
-static inline uint16_t calculateDshotValue(float motorValue) {
-    if (feature(FEATURE_3D)) {
-        if (motorValue == DSHOT_DISARM_COMMAND || motorValue < DSHOT_MIN_THROTTLE) {
-            return (uint16_t)PWM_RANGE_MID;
-        } else if (motorValue <= DSHOT_3D_DEADBAND_LOW) {
-            return (uint16_t)scaleRange(motorValue, DSHOT_MIN_THROTTLE, DSHOT_3D_DEADBAND_LOW, PWM_RANGE_MID - 1, PWM_RANGE_MIN);
-        } else {
-            return (uint16_t)scaleRange(motorValue, DSHOT_3D_DEADBAND_HIGH, DSHOT_MAX_THROTTLE, PWM_RANGE_MID + 1, PWM_RANGE_MAX);
-        }
-    } else {
-        return (uint16_t)(motorValue < DSHOT_MIN_THROTTLE) ? PWM_RANGE_MIN : scaleRange(motorValue, DSHOT_MIN_THROTTLE, DSHOT_MAX_THROTTLE, PWM_RANGE_MIN + 1, PWM_RANGE_MAX);
-    }
-}
-
 float convertExternalToMotor(uint16_t externalValue)
 {
-    #ifdef USE_DSHOT
-    if ((int)isMotorProtocolDshot()) {
-        return (float)calculateDshotValue(constrain(externalValue, PWM_RANGE_MIN, PWM_RANGE_MAX));
+    uint16_t motorValue;
+    switch ((int)isMotorProtocolDshot()) {
+#ifdef USE_DSHOT
+    case true:
+        externalValue = constrain(externalValue, PWM_RANGE_MIN, PWM_RANGE_MAX);
+
+        if (feature(FEATURE_3D)) {
+            if (externalValue == PWM_RANGE_MID) {
+                motorValue = DSHOT_DISARM_COMMAND;
+            } else if (externalValue < PWM_RANGE_MID) {
+                motorValue = scaleRange(externalValue, PWM_RANGE_MIN, PWM_RANGE_MID - 1, DSHOT_3D_DEADBAND_LOW, DSHOT_MIN_THROTTLE);
+            } else {
+                motorValue = scaleRange(externalValue, PWM_RANGE_MID + 1, PWM_RANGE_MAX, DSHOT_3D_DEADBAND_HIGH, DSHOT_MAX_THROTTLE);
+            }
+        } else {
+            motorValue = (externalValue == PWM_RANGE_MIN) ? DSHOT_DISARM_COMMAND : scaleRange(externalValue, PWM_RANGE_MIN + 1, PWM_RANGE_MAX, DSHOT_MIN_THROTTLE, DSHOT_MAX_THROTTLE);
+        }
+
+        break;
+    case false:
+#endif
+    default:
+        motorValue = externalValue;
+        break;
     }
-    #endif
-    return (float)externalValue;
+
+    return (float)motorValue;
 }
 
 uint16_t convertMotorToExternal(float motorValue)
 {
-    #ifdef USE_DSHOT
-    if ((int)isMotorProtocolDshot()) {
-        return (uint16_t)calculateDshotValue(motorValue);
+    uint16_t externalValue;
+    switch ((int)isMotorProtocolDshot()) {
+#ifdef USE_DSHOT
+    case true:
+        if (feature(FEATURE_3D)) {
+            if (motorValue == DSHOT_DISARM_COMMAND || motorValue < DSHOT_MIN_THROTTLE) {
+                externalValue = PWM_RANGE_MID;
+            } else if (motorValue <= DSHOT_3D_DEADBAND_LOW) {
+                externalValue = scaleRange(motorValue, DSHOT_MIN_THROTTLE, DSHOT_3D_DEADBAND_LOW, PWM_RANGE_MID - 1, PWM_RANGE_MIN);
+            } else {
+                externalValue = scaleRange(motorValue, DSHOT_3D_DEADBAND_HIGH, DSHOT_MAX_THROTTLE, PWM_RANGE_MID + 1, PWM_RANGE_MAX);
+            }
+        } else {
+            externalValue = (motorValue < DSHOT_MIN_THROTTLE) ? PWM_RANGE_MIN : scaleRange(motorValue, DSHOT_MIN_THROTTLE, DSHOT_MAX_THROTTLE, PWM_RANGE_MIN + 1, PWM_RANGE_MAX);
+        }
+        break;
+    case false:
+#endif
+    default:
+        externalValue = motorValue;
+        break;
     }
-    #endif
-    return (uint16_t)motorValue;
+
+    return externalValue;
 }
