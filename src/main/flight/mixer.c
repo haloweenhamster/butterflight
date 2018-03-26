@@ -56,9 +56,6 @@
 
 #include "sensors/battery.h"
 
-#define GET_DSHOT_THROTTLE(min, low, offset) min + ((low - DSHOT_MIN_THROTTLE) / 100.0f) * CONVERT_PARAMETER_TO_PERCENT(offset);
-
-
 PG_REGISTER_WITH_RESET_TEMPLATE(mixerConfig_t, mixerConfig, PG_MIXER_CONFIG, 0);
 
 PG_RESET_TEMPLATE(mixerConfig_t, mixerConfig,
@@ -173,11 +170,14 @@ void initEscEndpoints(void)
     if ((motorConfig()->dev.motorPwmProtocol & 0xFF00) != 0) {
         #ifdef USE_DSHOT
         disarmMotorOutput = DSHOT_DISARM_COMMAND;
-        uint32_t low = is3dEnabled ? DSHOT_3D_DEADBAND_LOW : DSHOT_MAX_THROTTLE;
-        deadbandMotor3dLow = DSHOT_3D_DEADBAND_LOW;
+        if (feature(FEATURE_3D)) {
+            motorOutputLow = DSHOT_MIN_THROTTLE + ((DSHOT_3D_DEADBAND_LOW - DSHOT_MIN_THROTTLE) / 100.0f) * CONVERT_PARAMETER_TO_PERCENT(motorConfig()->digitalIdleOffsetValue);
+        } else {
+            motorOutputLow = DSHOT_MIN_THROTTLE + ((DSHOT_MAX_THROTTLE - DSHOT_MIN_THROTTLE) / 100.0f) * CONVERT_PARAMETER_TO_PERCENT(motorConfig()->digitalIdleOffsetValue);
+        }
         motorOutputHigh = DSHOT_MAX_THROTTLE;
-        motorOutputLow = GET_DSHOT_THROTTLE(DSHOT_MIN_THROTTLE, low, motorConfig()->digitalIdleOffsetValue);
-        deadbandMotor3dHigh = GET_DSHOT_THROTTLE(DSHOT_3D_DEADBAND_HIGH, DSHOT_MAX_THROTTLE, motorConfig()->digitalIdleOffsetValue);
+        deadbandMotor3dHigh = DSHOT_3D_DEADBAND_HIGH + ((DSHOT_MAX_THROTTLE - DSHOT_3D_DEADBAND_HIGH) / 100.0f) * CONVERT_PARAMETER_TO_PERCENT(motorConfig()->digitalIdleOffsetValue);
+        deadbandMotor3dLow = DSHOT_3D_DEADBAND_LOW;
         #endif        
     } else {
         motorOutputHigh = motorConfig()->maxthrottle;
